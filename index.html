@@ -99,14 +99,7 @@ svg#canvas {
 .tool-btn.active svg circle,
 .tool-btn.active svg line,
 .tool-btn.active svg polyline { stroke: white; fill: none; }
-.tool-btn.active .icon-text { color: white; }
 
-.icon-text {
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--text);
-}
 
 /* Vertical separator in toolbar */
 .tool-sep {
@@ -412,9 +405,7 @@ svg#canvas {
       <line x1="2" y1="14" x2="14" y2="2" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round"/>
     </svg>
   </button>
-  <button class="tool-btn" id="tool-text" data-tool="text" data-tip="テキスト (T)">
-    <span class="icon-text">T</span>
-  </button>
+
   <div class="tool-sep"></div>
   <button class="tool-btn" id="tool-eraser" data-tool="eraser" data-tip="消しゴム (E)">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -534,7 +525,6 @@ document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
     deselect();
     svg.style.cursor = tool === 'select' ? 'default'
       : tool === 'eraser' ? 'cell'
-      : tool === 'text' ? 'text'
       : 'crosshair';
   });
 });
@@ -542,7 +532,7 @@ document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
 // Keyboard
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  const map = { v:'select', p:'pen', h:'highlight', a:'arrow', r:'rect', c:'circle', l:'line', t:'text', e:'eraser' };
+  const map = { v:'select', p:'pen', h:'highlight', a:'arrow', r:'rect', c:'circle', l:'line', e:'eraser' };
   if (map[e.key]) {
     tool = map[e.key];
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
@@ -641,10 +631,7 @@ function onDown(e) {
     return;
   }
 
-  if (tool === 'text') {
-    createTextInput(pt);
-    return;
-  }
+
 
   isDrawing = true;
   startPt = pt;
@@ -880,52 +867,7 @@ function ensureArrowMarker() {
   defs.appendChild(marker);
 }
 
-// ===================== TEXT TOOL =====================
-function createTextInput(pt) {
-  const fo = makeSVGEl('foreignObject');
-  fo.setAttribute('x', pt.x); fo.setAttribute('y', pt.y - 12);
-  fo.setAttribute('width', '300'); fo.setAttribute('height', '40');
-  const inp = document.createElement('input');
-  inp.type = 'text';
-  inp.style.cssText = `
-    font-family: 'Nunito', sans-serif;
-    font-size: ${Math.max(14, strokeWidth * 4)}px;
-    color: ${color};
-    background: transparent;
-    border: none;
-    outline: 1px dashed rgba(0,122,255,0.5);
-    width: 100%;
-    min-width: 80px;
-    caret-color: ${color};
-  `;
-  fo.appendChild(inp);
-  svg.insertBefore(fo, getSelGroup());
-  inp.focus();
 
-  function commit() {
-    const val = inp.value.trim();
-    fo.remove();
-    if (!val) return;
-    const text = makeSVGEl('text');
-    text.setAttribute('x', pt.x);
-    text.setAttribute('y', pt.y);
-    text.setAttribute('fill', color);
-    text.setAttribute('font-family', 'Nunito, sans-serif');
-    text.setAttribute('font-size', Math.max(14, strokeWidth * 4));
-    text.setAttribute('font-weight', '600');
-    text.textContent = val;
-    svg.insertBefore(text, getSelGroup());
-    const id = newId();
-    text.dataset.objId = id;
-    let tbbox;
-    try { tbbox = text.getBBox(); } catch(e) { tbbox = {x: pt.x, y: pt.y, width: 100, height: 20}; }
-    objects.push({ id, el: text, type: 'text', color, sw: strokeWidth, angle: 0,
-      tx: 0, ty: 0, origCx: tbbox.x + tbbox.width/2, origCy: tbbox.y + tbbox.height/2 });
-    saveHistory();
-  }
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') commit(); });
-  inp.addEventListener('blur', commit);
-}
 
 // ===================== SELECTION =====================
 function getHitObject(el) {
@@ -1095,7 +1037,7 @@ function updateSelectionHandles(obj) {
           cy: parseFloat(el.getAttribute('cy')),
         };
       } else {
-        // pen/highlight/text: fallback to bbox
+        // pen/highlight: fallback to bbox
         try {
           const b = el.getBBox();
           resizeObjSnapshot = { x: b.x, y: b.y, w: b.width, h: b.height };

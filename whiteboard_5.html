@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ホワイトボードです">
+<title>Whiteboard</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" href="favicon.ico" type="image/x-icon">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500&family=Nunito:wght@300;400;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --glass-bg: rgba(255,255,255,0.55);
+  --glass-border: rgba(255,255,255,0.75);
+  --glass-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9);
+  --glass-blur: blur(24px) saturate(1.8);
+  --accent: #007AFF;
+  --accent2: #FF2D55;
+  --text: #1c1c1e;
+  --muted: rgba(60,60,67,0.45);
+  --selected: #007AFF;
+}
+
+body {
+  font-family: 'Nunito', -apple-system, sans-serif;
+  background: #f5f5f7;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* CANVAS */
+#board {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  cursor: default;
+  overflow: hidden;
+}
+
+svg#canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* GLASS PANEL BASE */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ===== TOP TOOLBAR (unified) ===== */
+#toolbar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 22px;
+  padding: 5px 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  z-index: 100;
+  white-space: nowrap;
+}
+
+.tool-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  position: relative;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.tool-btn:hover { background: rgba(0,0,0,0.06); }
+.tool-btn.active {
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,122,255,0.35);
+}
+.tool-btn.active svg path,
+.tool-btn.active svg rect,
+.tool-btn.active svg circle,
+.tool-btn.active svg line,
+.tool-btn.active svg polyline { stroke: white; fill: none; }
+.tool-btn.active .icon-text { color: white; }
+
+.icon-text {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+
+/* Vertical separator in toolbar */
+.tool-sep {
+  width: 1px;
+  height: 22px;
+  background: rgba(0,0,0,0.1);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Tooltip - below bar */
+.tool-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(28,28,30,0.85);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 200;
+}
+.tool-btn:hover::after { opacity: 1; }
+
+/* Act buttons (undo/redo/clear) inline in toolbar */
+.act-btn {
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.act-btn:hover { background: rgba(0,0,0,0.06); color: var(--text); }
+.act-btn.danger:hover { background: rgba(255,45,85,0.08); color: var(--accent2); }
+
+/* デスクトップ/モバイル表示切り替え */
+.desktop-actions { 
+  display: flex; 
+  flex-direction: row;
+  gap: 4px; 
+  align-items: center;
+}
+.mobile-actions { display: none; }
+
+/* 初期状態（デスクトップ）で正しく表示 */
+@media (min-width: 769px) {
+  .desktop-actions { display: flex !important; }
+  .mobile-actions { display: none !important; }
+}
+
+/* ===== BOTTOM COLOR BAR ===== */
+#bottombar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 22px;
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+}
+
+.color-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  flex-shrink: 0;
+}
+.color-dot:hover { transform: scale(1.2); }
+.color-dot.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px var(--accent);
+  transform: scale(1.1);
+}
+
+.bar-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(0,0,0,0.1);
+}
+
+#stroke-slider {
+  -webkit-appearance: none;
+  width: 68px;
+  height: 3px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 2px;
+  outline: none;
+}
+#stroke-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,122,255,0.4);
+}
+
+.stroke-preview {
+  font-size: 10px;
+  color: var(--muted);
+  width: 16px;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* SELECTION HANDLES */
+.sel-handle { cursor: pointer; }
+.rot-handle { cursor: grab; }
+.rot-handle:active { cursor: grabbing; }
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+  /* 縦向きメニューバー */
+  #toolbar {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    transform: none;
+    flex-direction: column;
+    padding: 6px 4px;
+    gap: 3px;
+    border-radius: 18px;
+    max-height: calc(100vh - 32px);
+  }
+  
+  .tool-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+  
+  .tool-sep {
+    width: 22px;
+    height: 1px;
+    margin: 2px 0;
+  }
+  
+  .act-btn {
+    width: 40px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+    font-size: 10px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+  
+  /* ツールチップの位置調整 */
+  .tool-btn::after {
+    top: 50%;
+    left: calc(100% + 10px);
+    transform: translateY(-50%);
+  }
+  
+  /* 下部カラーバーは元のまま（横並び・下部配置） */
+  #bottombar {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: row;
+    padding: 7px 14px;
+    gap: 8px;
+    border-radius: 22px;
+  }
+  
+  .color-dot {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .bar-sep {
+    width: 1px;
+    height: 18px;
+  }
+  
+  #stroke-slider {
+    width: 68px;
+    height: 3px;
+    writing-mode: horizontal-tb;
+  }
+  
+  .stroke-preview {
+    writing-mode: horizontal-tb;
+    width: 16px;
+    height: auto;
+    text-align: right;
+  }
+}
+
+/* 横向きモバイル対応 */
+  @media (max-width: 768px) and (orientation: landscape) {
+    #toolbar {
+      top: 16px;
+      left: 16px;
+      max-height: calc(100vh - 32px);
+    }
+    
+    #bottombar {
+      bottom: 16px;
+      left: auto;
+      right: 16px;
+    }
+  }
+  
+  /* モバイル表示時：デスクトップを非表示、モバイルを表示 */
+  @media (max-width: 768px) {
+    .desktop-actions { display: none !important; }
+    .mobile-actions { 
+      display: flex !important; 
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .mobile-actions .tool-btn {
+      width: 32px;
+      height: 32px;
+    }
+    
+    .mobile-actions .tool-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
+  
+  /* デスクトップ表示時：モバイルを非表示 */
+  @media (min-width: 769px) {
+    .desktop-actions { display: flex !important; }
+    .mobile-actions { display: none !important; }
+  }
+
+</style>
+</head>
+<body>
+
+<div id="board">
+  <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<!-- TOOLBAR -->
+<div id="toolbar" class="glass">
+  <button class="tool-btn active" id="tool-select" data-tool="select" data-tip="選択 (V)">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M3 2L13 8L8.5 9.5L6 14L3 2Z" stroke="#1c1c1e" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="tool-pen" data-tool="pen" data-tip="ペン (P)">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M9.5 2.5L13.5 6.5L6 14H2V10L9.5 2.5Z" stroke="#1c1c1e" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M7.5 4.5L11.5 8.5" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </button>
+  <button class="tool-btn" id="tool-highlight" data-tool="highlight" data-tip="ハイライト (H)">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="#1c1c1e" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="tool-arrow" data-tool="arrow" data-tip="矢印 (A)">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <line x1="3" y1="13" x2="13" y2="3" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round"/>
+      <polyline points="7,3 13,3 13,9" stroke="#1c1c1e" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+    </svg>
+  </button>
+  <button class="tool-btn" id="tool-rect" data-tool="rect" data-tip="四角 (R)">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="#1c1c1e" stroke-width="1.5"/>
+    </svg>
+  </button>
+  <button class="tool-btn" id="tool-circle" data-tool="circle" data-tip="円 (C)">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="5.5" stroke="#1c1c1e" stroke-width="1.5"/>
+    </svg>
+  </button>
+  <button class="tool-btn" id="tool-line" data-tool="line" data-tip="直線 (L)">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <line x1="2" y1="14" x2="14" y2="2" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </button>
+  <button class="tool-btn" id="tool-text" data-tool="text" data-tip="テキスト (T)">
+    <span class="icon-text">T</span>
+  </button>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="tool-eraser" data-tool="eraser" data-tip="消しゴム (E)">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M3 13L8 3L13 8L7 13H3Z" stroke="#1c1c1e" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="btn-image" data-tip="画像を追加" onclick="triggerImageUpload()">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="3.5" width="13" height="9" rx="1.5" stroke="#1c1c1e" stroke-width="1.5"/>
+      <circle cx="5.5" cy="6.5" r="1.2" stroke="#1c1c1e" stroke-width="1.2"/>
+      <path d="M1.5 11L5 7.5L8 10.5L10.5 8L14.5 12.5" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <div class="tool-sep"></div>
+  <!-- デスクトップ用アクションボタン -->
+  <div class="desktop-actions">
+    <button class="act-btn" onclick="undo()">↩ 戻す</button>
+    <button class="act-btn" onclick="redo()">↪ やり直し</button>
+    <button class="act-btn danger" onclick="clearAll()">🗑 消去</button>
+  </div>
+  <!-- モバイル用アクションアイコン -->
+  <div class="mobile-actions">
+    <button class="tool-btn" onclick="undo()" data-tip="戻す">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M4 8H12" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M4 8L7 5M4 8L7 11" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <button class="tool-btn" onclick="redo()" data-tip="やり直し">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M12 8H4" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M12 8L9 5M12 8L9 11" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <button class="tool-btn" onclick="clearAll()" data-tip="消去">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M6 2H10" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M3 4H13V13C13 13.5523 12.5523 14 12 14H4C3.44772 14 3 13.5523 3 13V4Z" stroke="#1c1c1e" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M6 6V11M10 6V11" stroke="#1c1c1e" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<input type="file" id="image-file-input" accept="image/*" style="display:none" />
+
+<!-- BOTTOM COLOR BAR -->
+<div id="bottombar" class="glass">
+  <div class="color-dot active" style="background:#1c1c1e" data-color="#1c1c1e"></div>
+  <div class="color-dot" style="background:#007AFF" data-color="#007AFF"></div>
+  <div class="color-dot" style="background:#FF2D55" data-color="#FF2D55"></div>
+  <div class="color-dot" style="background:#FF9500" data-color="#FF9500"></div>
+  <div class="color-dot" style="background:#34C759" data-color="#34C759"></div>
+  <div class="color-dot" style="background:#AF52DE" data-color="#AF52DE"></div>
+  <div class="color-dot" style="background:#FFD60A" data-color="#FFD60A"></div>
+  <div class="bar-sep"></div>
+  <div id="custom-color-dot" class="color-dot" title="カスタムカラー"
+    style="background: #e8e8e8; position:relative; overflow:hidden; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+    <svg width="12" height="12" viewBox="0 0 12 12" style="pointer-events:none; flex-shrink:0;">
+      <circle cx="6" cy="6" r="5" fill="none" stroke="#aaa" stroke-width="1"/>
+      <path d="M6 1 A5 5 0 0 1 11 6" fill="#FF2D55" stroke="none"/>
+      <path d="M11 6 A5 5 0 0 1 6 11" fill="#FF9500" stroke="none"/>
+      <path d="M6 11 A5 5 0 0 1 1 6" fill="#34C759" stroke="none"/>
+      <path d="M1 6 A5 5 0 0 1 6 1" fill="#007AFF" stroke="none"/>
+    </svg>
+    <input type="color" id="custom-color" value="#1c1c1e"
+      style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:none;padding:0;" />
+  </div>
+  <div class="bar-sep"></div>
+  <span class="stroke-preview" id="stroke-val">3</span>
+  <input type="range" id="stroke-slider" min="1" max="30" value="3" />
+</div>
+
+<script>
+// ===================== STATE =====================
+const svg = document.getElementById('canvas');
+let tool = 'select';
+let color = '#1c1c1e';
+let strokeWidth = 3;
+let fillEnabled = false;
+
+let objects = []; // { id, el, type, ... }
+let selectedId = null;
+let history = [];
+let histIdx = -1;
+
+let isDrawing = false;
+let startPt = null;
+let currentEl = null;
+let penPoints = [];
+
+// Move / Rotate / Resize state
+let isDragging = false;
+let isRotating = false;
+let isResizing = false;
+let resizeCorner = null; // 'tl','tr','bl','br'
+let resizeObjSnapshot = null; // { x, y, w, h } or path originals
+let isDraggingEndpoint = false;
+let draggingEndpoint = null; // 'p1' or 'p2'
+let dragOffsetX = 0, dragOffsetY = 0;
+let rotStartAngle = 0, rotObjAngle = 0;
+let rotCx = 0, rotCy = 0;
+
+// Selection overlay group
+let selGroup = null;
+
+let idCounter = 0;
+function newId() { return 'obj_' + (++idCounter); }
+
+// ===================== TOOL SELECT =====================
+document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    tool = btn.dataset.tool;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    deselect();
+    svg.style.cursor = tool === 'select' ? 'default'
+      : tool === 'eraser' ? 'cell'
+      : tool === 'text' ? 'text'
+      : 'crosshair';
+  });
+});
+
+// Keyboard
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const map = { v:'select', p:'pen', h:'highlight', a:'arrow', r:'rect', c:'circle', l:'line', t:'text', e:'eraser' };
+  if (map[e.key]) {
+    tool = map[e.key];
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('tool-' + tool);
+    if (btn) btn.classList.add('active');
+    deselect();
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
+  if (e.key === 'Escape') deselect();
+});
+
+// ===================== COLOR & STROKE =====================
+document.querySelectorAll('.color-dot').forEach(dot => {
+  dot.addEventListener('click', () => {
+    color = dot.dataset.color;
+    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+    dot.classList.add('active');
+    document.getElementById('custom-color').value = color;
+    if (selectedId) updateSelectedStyle();
+  });
+});
+document.getElementById('custom-color').addEventListener('input', e => {
+  color = e.target.value;
+  document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+  if (selectedId) updateSelectedStyle();
+});
+document.getElementById('stroke-slider').addEventListener('input', e => {
+  strokeWidth = parseInt(e.target.value);
+  document.getElementById('stroke-val').textContent = strokeWidth;
+  if (selectedId) updateSelectedStyle();
+});
+
+function updateSelectedStyle() {
+  const obj = objects.find(o => o.id === selectedId);
+  if (!obj) return;
+  const el = obj.el;
+  el.setAttribute('stroke', color);
+  el.setAttribute('stroke-width', strokeWidth);
+  if (obj.type !== 'pen' && obj.type !== 'line' && obj.type !== 'arrow') {
+    el.setAttribute('fill', fillEnabled ? color + '33' : 'none');
+  }
+  obj.color = color;
+  obj.sw = strokeWidth;
+  saveHistory();
+}
+
+// ===================== SVG COORDS =====================
+function svgPt(e) {
+  const rect = svg.getBoundingClientRect();
+  const touch = e.touches ? e.touches[0] : e;
+  return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+}
+
+// ===================== DRAWING =====================
+svg.addEventListener('mousedown', onDown);
+window.addEventListener('mousemove', onMove);
+svg.addEventListener('mouseleave', () => {});  // keep for compat
+
+function onDown(e) {
+  if (e.button !== 0) return;
+  // Don't interfere with selection handle interactions
+  const sg = document.getElementById('sel-group');
+  if (sg && sg.contains(e.target)) return;
+  const pt = svgPt(e);
+
+  if (tool === 'select') {
+    // Check if click on object
+    const hit = getHitObject(e.target);
+    if (hit) {
+      selectObject(hit.id);
+      isDragging = true;
+      // Get raw bbox center (no transform)
+      const saved = hit.el.getAttribute('transform');
+      hit.el.removeAttribute('transform');
+      let bbox;
+      try { bbox = hit.el.getBBox(); } catch(e) { bbox = {x:0,y:0,width:0,height:0}; }
+      if (saved) hit.el.setAttribute('transform', saved);
+      const rawCx = bbox.x + bbox.width/2;
+      const rawCy = bbox.y + bbox.height/2;
+      const tx = hit.tx || 0, ty = hit.ty || 0;
+      // actual screen center
+      dragOffsetX = pt.x - (rawCx + tx);
+      dragOffsetY = pt.y - (rawCy + ty);
+    } else {
+      deselect();
+    }
+    return;
+  }
+
+  if (tool === 'eraser') {
+    const hit = getHitObject(e.target);
+    if (hit) removeObject(hit.id);
+    isDrawing = true; // keep erasing on drag
+    return;
+  }
+
+  if (tool === 'text') {
+    createTextInput(pt);
+    return;
+  }
+
+  isDrawing = true;
+  startPt = pt;
+  penPoints = [pt];
+
+  if (tool === 'pen' || tool === 'highlight') {
+    currentEl = makeSVGEl('path');
+    currentEl.setAttribute('d', `M${pt.x},${pt.y}`);
+    currentEl.setAttribute('stroke', color);
+    currentEl.setAttribute('stroke-width', tool === 'highlight' ? strokeWidth * 6 : strokeWidth);
+    currentEl.setAttribute('stroke-linecap', 'round');
+    currentEl.setAttribute('stroke-linejoin', 'round');
+    currentEl.setAttribute('fill', 'none');
+    currentEl.setAttribute('pointer-events', 'stroke');
+    if (tool === 'highlight') currentEl.setAttribute('opacity', '0.4');
+    svg.insertBefore(currentEl, getSelGroup());
+  } else if (tool === 'rect') {
+    currentEl = makeSVGEl('rect');
+    styleShape(currentEl);
+    svg.insertBefore(currentEl, getSelGroup());
+  } else if (tool === 'circle') {
+    currentEl = makeSVGEl('ellipse');
+    styleShape(currentEl);
+    svg.insertBefore(currentEl, getSelGroup());
+  } else if (tool === 'line') {
+    currentEl = makeSVGEl('line');
+    currentEl.setAttribute('stroke', color);
+    currentEl.setAttribute('stroke-width', strokeWidth);
+    currentEl.setAttribute('stroke-linecap', 'round');
+    currentEl.setAttribute('x1', pt.x); currentEl.setAttribute('y1', pt.y);
+    currentEl.setAttribute('x2', pt.x); currentEl.setAttribute('y2', pt.y);
+    svg.insertBefore(currentEl, getSelGroup());
+  } else if (tool === 'arrow') {
+    ensureArrowMarker();
+    currentEl = makeSVGEl('line');
+    currentEl.setAttribute('stroke', color);
+    currentEl.setAttribute('stroke-width', strokeWidth);
+    currentEl.setAttribute('stroke-linecap', 'round');
+    currentEl.setAttribute('marker-end', `url(#arrow-${color.replace('#','')})`);
+    currentEl.setAttribute('x1', pt.x); currentEl.setAttribute('y1', pt.y);
+    currentEl.setAttribute('x2', pt.x); currentEl.setAttribute('y2', pt.y);
+    svg.insertBefore(currentEl, getSelGroup());
+  }
+}
+
+function onMove(e) {
+  const pt = svgPt(e);
+
+  if (isResizing && selectedId) {
+    const obj = objects.find(o => o.id === selectedId);
+    if (!obj) return;
+    const snap = resizeObjSnapshot;
+    const tx = obj.tx || 0, ty = obj.ty || 0;
+    const el = obj.el;
+    const tag = el.tagName;
+
+    if (tag === 'rect' || tag === 'image') {
+      let nx = snap.x, ny = snap.y, nw = snap.w, nh = snap.h;
+      if (resizeCorner === 'tl') {
+        nw = snap.x + snap.w - (pt.x - tx); nx = pt.x - tx;
+        nh = snap.y + snap.h - (pt.y - ty); ny = pt.y - ty;
+      } else if (resizeCorner === 'tr') {
+        nw = (pt.x - tx) - snap.x;
+        nh = snap.y + snap.h - (pt.y - ty); ny = pt.y - ty;
+      } else if (resizeCorner === 'bl') {
+        nw = snap.x + snap.w - (pt.x - tx); nx = pt.x - tx;
+        nh = (pt.y - ty) - snap.y;
+      } else {
+        nw = (pt.x - tx) - snap.x;
+        nh = (pt.y - ty) - snap.y;
+      }
+      if (nw > 2) { el.setAttribute('x', nx); el.setAttribute('width', nw); }
+      if (nh > 2) { el.setAttribute('y', ny); el.setAttribute('height', nh); }
+
+    } else if (tag === 'ellipse') {
+      const cx = snap.cx, cy = snap.cy;
+      const rx = Math.abs((pt.x - tx) - cx);
+      const ry = Math.abs((pt.y - ty) - cy);
+      if (rx > 2) el.setAttribute('rx', rx);
+      if (ry > 2) el.setAttribute('ry', ry);
+    }
+
+    // Update origCx/origCy for rotate pivot
+    try {
+      const b = el.getBBox();
+      obj.origCx = b.x + b.width/2;
+      obj.origCy = b.y + b.height/2;
+    } catch(e) {}
+    updateSelectionHandles(obj);
+    return;
+  }
+
+  if (isDraggingEndpoint && selectedId) {
+    const obj = objects.find(o => o.id === selectedId);
+    if (!obj) return;
+    const tx = obj.tx || 0, ty = obj.ty || 0;
+    if (draggingEndpoint === 'p1') {
+      obj.el.setAttribute('x1', pt.x - tx);
+      obj.el.setAttribute('y1', pt.y - ty);
+    } else {
+      obj.el.setAttribute('x2', pt.x - tx);
+      obj.el.setAttribute('y2', pt.y - ty);
+    }
+    updateSelectionHandles(obj);
+    return;
+  }
+
+  if (isDragging && selectedId) {
+    const obj = objects.find(o => o.id === selectedId);
+    if (!obj) return;
+    // desired raw center
+    const newCx = pt.x - dragOffsetX;
+    const newCy = pt.y - dragOffsetY;
+    translateObj(obj, newCx, newCy);
+    updateSelectionHandles(obj);
+    return;
+  }
+
+  if (isRotating && selectedId) {
+    const obj = objects.find(o => o.id === selectedId);
+    if (!obj) return;
+    const angle = Math.atan2(pt.y - rotCy, pt.x - rotCx);
+    const delta = (angle - rotStartAngle) * 180 / Math.PI;
+    const newAngle = rotObjAngle + delta;
+    obj.angle = newAngle;
+    const tx = obj.tx || 0, ty = obj.ty || 0;
+    const ocx = obj.origCx || 0, ocy = obj.origCy || 0;
+    obj.el.setAttribute('transform', `translate(${tx},${ty}) rotate(${newAngle},${ocx},${ocy})`);
+    updateSelectionHandles(obj);
+    return;
+  }
+
+  if (!isDrawing) return;
+
+  // Eraser drag — no currentEl needed
+  if (tool === 'eraser') {
+    const hit = getHitObjectAtPoint(pt);
+    if (hit) removeObject(hit.id);
+    return;
+  }
+
+  if (!currentEl) return;
+  const dx = pt.x - startPt.x, dy = pt.y - startPt.y;
+
+  if (tool === 'pen' || tool === 'highlight') {
+    penPoints.push(pt);
+    const d = penPoints.map((p,i) => (i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`)).join(' ');
+    currentEl.setAttribute('d', d);
+  } else if (tool === 'rect') {
+    const x = dx < 0 ? pt.x : startPt.x;
+    const y = dy < 0 ? pt.y : startPt.y;
+    currentEl.setAttribute('x', x); currentEl.setAttribute('y', y);
+    currentEl.setAttribute('width', Math.abs(dx)); currentEl.setAttribute('height', Math.abs(dy));
+  } else if (tool === 'circle') {
+    currentEl.setAttribute('cx', startPt.x + dx/2);
+    currentEl.setAttribute('cy', startPt.y + dy/2);
+    currentEl.setAttribute('rx', Math.abs(dx)/2);
+    currentEl.setAttribute('ry', Math.abs(dy)/2);
+  } else if (tool === 'line' || tool === 'arrow') {
+    currentEl.setAttribute('x2', pt.x); currentEl.setAttribute('y2', pt.y);
+  }
+}
+
+function onUp(e) {
+  // drag/rotate/resize/endpoint are handled by window mouseup
+  if (isDragging || isRotating || isResizing || isDraggingEndpoint) return;
+  if (!isDrawing) return;
+  isDrawing = false;
+  if (tool === 'eraser' || !currentEl) return; // eraser done
+
+  const id = newId();
+  const obj = {
+    id, el: currentEl,
+    type: tool,
+    color,
+    sw: strokeWidth,
+    angle: 0,
+    tx: 0, ty: 0
+  };
+
+  // Store raw bbox center for rotation pivot
+  let bbox2;
+  try { bbox2 = currentEl.getBBox(); } catch(e) { bbox2 = {x:0,y:0,width:0,height:0}; }
+  obj.origCx = bbox2.x + bbox2.width/2;
+  obj.origCy = bbox2.y + bbox2.height/2;
+
+  objects.push(obj);
+  currentEl.dataset.objId = id;
+  currentEl = null;
+  saveHistory();
+}
+
+// ===================== SHAPE HELPERS =====================
+function makeSVGEl(tag) {
+  return document.createElementNS('http://www.w3.org/2000/svg', tag);
+}
+function styleShape(el) {
+  el.setAttribute('stroke', color);
+  el.setAttribute('stroke-width', strokeWidth);
+  el.setAttribute('fill', fillEnabled ? color + '33' : 'none');
+  el.setAttribute('stroke-linecap', 'round');
+  el.setAttribute('stroke-linejoin', 'round');
+}
+function getSelGroup() {
+  selGroup = document.getElementById('sel-group');
+  if (!selGroup) {
+    selGroup = makeSVGEl('g');
+    selGroup.id = 'sel-group';
+    svg.appendChild(selGroup);
+  }
+  return selGroup;
+}
+
+// Arrow marker
+const markers = new Set();
+function ensureArrowMarker() {
+  const key = color.replace('#','');
+  if (markers.has(key)) return;
+  markers.add(key);
+  let defs = svg.querySelector('defs');
+  if (!defs) { defs = makeSVGEl('defs'); svg.prepend(defs); }
+  const marker = makeSVGEl('marker');
+  marker.setAttribute('id', `arrow-${key}`);
+  marker.setAttribute('markerWidth', '8');
+  marker.setAttribute('markerHeight', '8');
+  marker.setAttribute('refX', '6');
+  marker.setAttribute('refY', '3');
+  marker.setAttribute('orient', 'auto');
+  const path = makeSVGEl('path');
+  path.setAttribute('d', 'M0,0 L0,6 L8,3 Z');
+  path.setAttribute('fill', color);
+  marker.appendChild(path);
+  defs.appendChild(marker);
+}
+
+// ===================== TEXT TOOL =====================
+function createTextInput(pt) {
+  const fo = makeSVGEl('foreignObject');
+  fo.setAttribute('x', pt.x); fo.setAttribute('y', pt.y - 12);
+  fo.setAttribute('width', '300'); fo.setAttribute('height', '40');
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.style.cssText = `
+    font-family: 'Nunito', sans-serif;
+    font-size: ${Math.max(14, strokeWidth * 4)}px;
+    color: ${color};
+    background: transparent;
+    border: none;
+    outline: 1px dashed rgba(0,122,255,0.5);
+    width: 100%;
+    min-width: 80px;
+    caret-color: ${color};
+  `;
+  fo.appendChild(inp);
+  svg.insertBefore(fo, getSelGroup());
+  inp.focus();
+
+  function commit() {
+    const val = inp.value.trim();
+    fo.remove();
+    if (!val) return;
+    const text = makeSVGEl('text');
+    text.setAttribute('x', pt.x);
+    text.setAttribute('y', pt.y);
+    text.setAttribute('fill', color);
+    text.setAttribute('font-family', 'Nunito, sans-serif');
+    text.setAttribute('font-size', Math.max(14, strokeWidth * 4));
+    text.setAttribute('font-weight', '600');
+    text.textContent = val;
+    svg.insertBefore(text, getSelGroup());
+    const id = newId();
+    text.dataset.objId = id;
+    let tbbox;
+    try { tbbox = text.getBBox(); } catch(e) { tbbox = {x: pt.x, y: pt.y, width: 100, height: 20}; }
+    objects.push({ id, el: text, type: 'text', color, sw: strokeWidth, angle: 0,
+      tx: 0, ty: 0, origCx: tbbox.x + tbbox.width/2, origCy: tbbox.y + tbbox.height/2 });
+    saveHistory();
+  }
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') commit(); });
+  inp.addEventListener('blur', commit);
+}
+
+// ===================== SELECTION =====================
+function getHitObject(el) {
+  let cur = el;
+  while (cur && cur !== svg) {
+    if (cur.dataset && cur.dataset.objId) {
+      return objects.find(o => o.id === cur.dataset.objId);
+    }
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
+function getHitObjectAtPoint(pt) {
+  const svgRect = svg.getBoundingClientRect();
+  const clientX = pt.x + svgRect.left;
+  const clientY = pt.y + svgRect.top;
+  // Temporarily hide sel-group so we hit actual objects
+  const sg = document.getElementById('sel-group');
+  if (sg) sg.style.display = 'none';
+  const el = document.elementFromPoint(clientX, clientY);
+  if (sg) sg.style.display = '';
+  return el ? getHitObject(el) : null;
+}
+
+function selectObject(id) {
+  selectedId = id;
+  const obj = objects.find(o => o.id === id);
+  if (!obj) return;
+  drawSelectionHandles(obj);
+}
+
+function deselect() {
+  selectedId = null;
+  clearSelHandles();
+}
+
+function clearSelHandles() {
+  const g = document.getElementById('sel-group');
+  if (g) g.innerHTML = '';
+}
+
+function drawSelectionHandles(obj) {
+  clearSelHandles();
+  const g = getSelGroup();
+  updateSelectionHandles(obj);
+}
+
+function updateSelectionHandles(obj) {
+  const g = getSelGroup();
+  g.innerHTML = '';
+
+  const el = obj.el;
+
+  // ---- LINE / ARROW: show endpoint handles only ----
+  if (obj.type === 'line' || obj.type === 'arrow') {
+    const tx = obj.tx || 0, ty = obj.ty || 0;
+    const x1 = parseFloat(el.getAttribute('x1')) + tx;
+    const y1 = parseFloat(el.getAttribute('y1')) + ty;
+    const x2 = parseFloat(el.getAttribute('x2')) + tx;
+    const y2 = parseFloat(el.getAttribute('y2')) + ty;
+
+    // Dashed line between handles
+    const dline = makeSVGEl('line');
+    dline.setAttribute('x1', x1); dline.setAttribute('y1', y1);
+    dline.setAttribute('x2', x2); dline.setAttribute('y2', y2);
+    dline.setAttribute('stroke', '#007AFF'); dline.setAttribute('stroke-width', '1');
+    dline.setAttribute('stroke-dasharray', '4,3');
+    dline.style.pointerEvents = 'none';
+    g.appendChild(dline);
+
+    // Endpoint handle factory
+    function makeEndHandle(ex, ey, which) {
+      const c = makeSVGEl('circle');
+      c.setAttribute('cx', ex); c.setAttribute('cy', ey); c.setAttribute('r', '7');
+      c.setAttribute('fill', 'white'); c.setAttribute('stroke', '#007AFF'); c.setAttribute('stroke-width', '2');
+      c.style.cursor = 'crosshair';
+      c.addEventListener('mousedown', ev => {
+        ev.stopPropagation();
+        isDraggingEndpoint = true;
+        draggingEndpoint = which;
+      });
+      g.appendChild(c);
+      // Inner dot
+      const dot = makeSVGEl('circle');
+      dot.setAttribute('cx', ex); dot.setAttribute('cy', ey); dot.setAttribute('r', '3');
+      dot.setAttribute('fill', '#007AFF');
+      dot.style.pointerEvents = 'none';
+      g.appendChild(dot);
+    }
+
+    makeEndHandle(x1, y1, 'p1');
+    makeEndHandle(x2, y2, 'p2');
+    return;
+  }
+
+  // ---- ALL OTHER OBJECTS: bbox + rotate handle ----
+  const savedTransform = el.getAttribute('transform');
+  el.removeAttribute('transform');
+  let rawBbox;
+  try { rawBbox = el.getBBox(); } catch(e) { if (savedTransform) el.setAttribute('transform', savedTransform); return; }
+  if (savedTransform) el.setAttribute('transform', savedTransform);
+
+  if (!rawBbox || rawBbox.width === 0 && rawBbox.height === 0) return;
+
+  const tx = obj.tx || 0;
+  const ty = obj.ty || 0;
+  const angle = obj.angle || 0;
+
+  const pad = 8;
+  const x = rawBbox.x + tx - pad;
+  const y = rawBbox.y + ty - pad;
+  const w = rawBbox.width + pad * 2;
+  const h = rawBbox.height + pad * 2;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+
+  function rot(px, py) {
+    const rad = angle * Math.PI / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    return {
+      x: cx + (px - cx) * cos - (py - cy) * sin,
+      y: cy + (px - cx) * sin + (py - cy) * cos
+    };
+  }
+
+  const rect = makeSVGEl('rect');
+  rect.setAttribute('x', x); rect.setAttribute('y', y);
+  rect.setAttribute('width', w); rect.setAttribute('height', h);
+  rect.setAttribute('rx', '4');
+  rect.setAttribute('fill', 'none');
+  rect.setAttribute('stroke', '#007AFF');
+  rect.setAttribute('stroke-width', '1.5');
+  rect.setAttribute('stroke-dasharray', '5,3');
+  if (angle !== 0) rect.setAttribute('transform', `rotate(${angle},${cx},${cy})`);
+  rect.style.pointerEvents = 'none';
+  g.appendChild(rect);
+
+  const cornerDefs = [
+    {pos: {x, y},       corner: 'tl', cursor: 'nwse-resize'},
+    {pos: {x: x+w, y},  corner: 'tr', cursor: 'nesw-resize'},
+    {pos: {x, y: y+h},  corner: 'bl', cursor: 'nesw-resize'},
+    {pos: {x: x+w, y: y+h}, corner: 'br', cursor: 'nwse-resize'},
+  ];
+  cornerDefs.forEach(({pos: c, corner, cursor}) => {
+    const rp = rot(c.x, c.y);
+    const circle = makeSVGEl('circle');
+    circle.setAttribute('cx', rp.x); circle.setAttribute('cy', rp.y); circle.setAttribute('r', '5');
+    circle.setAttribute('fill', 'white'); circle.setAttribute('stroke', '#007AFF'); circle.setAttribute('stroke-width', '2');
+    circle.style.cursor = cursor;
+    circle.addEventListener('mousedown', ev => {
+      ev.stopPropagation();
+      isResizing = true;
+      resizeCorner = corner;
+      const el = obj.el;
+      const tag = el.tagName;
+      if (tag === 'rect' || tag === 'image') {
+        resizeObjSnapshot = {
+          x: parseFloat(el.getAttribute('x')),
+          y: parseFloat(el.getAttribute('y')),
+          w: parseFloat(el.getAttribute('width')),
+          h: parseFloat(el.getAttribute('height')),
+        };
+      } else if (tag === 'ellipse') {
+        resizeObjSnapshot = {
+          cx: parseFloat(el.getAttribute('cx')),
+          cy: parseFloat(el.getAttribute('cy')),
+        };
+      } else {
+        // pen/highlight/text: fallback to bbox
+        try {
+          const b = el.getBBox();
+          resizeObjSnapshot = { x: b.x, y: b.y, w: b.width, h: b.height };
+        } catch(e) { resizeObjSnapshot = {}; }
+      }
+    });
+    g.appendChild(circle);
+  });
+
+  const topCenter = rot(cx, y - 28);
+  const topEdge = rot(cx, y);
+  const rotLine = makeSVGEl('line');
+  rotLine.setAttribute('x1', topEdge.x); rotLine.setAttribute('y1', topEdge.y);
+  rotLine.setAttribute('x2', topCenter.x); rotLine.setAttribute('y2', topCenter.y);
+  rotLine.setAttribute('stroke', '#007AFF'); rotLine.setAttribute('stroke-width', '1.5');
+  rotLine.setAttribute('stroke-dasharray', '3,2');
+  rotLine.style.pointerEvents = 'none';
+  g.appendChild(rotLine);
+
+  const rotH = makeSVGEl('circle');
+  rotH.setAttribute('cx', topCenter.x); rotH.setAttribute('cy', topCenter.y); rotH.setAttribute('r', '7');
+  rotH.setAttribute('fill', '#007AFF'); rotH.setAttribute('stroke', 'white'); rotH.setAttribute('stroke-width', '2');
+  rotH.style.cursor = 'grab';
+
+  rotH.addEventListener('mousedown', eRot => {
+    eRot.stopPropagation();
+    isRotating = true;
+    obj.origCx = rawBbox.x + rawBbox.width / 2;
+    obj.origCy = rawBbox.y + rawBbox.height / 2;
+    rotCx = cx; rotCy = cy;
+    const pt2 = svgPt(eRot);
+    rotStartAngle = Math.atan2(pt2.y - rotCy, pt2.x - rotCx);
+    rotObjAngle = obj.angle || 0;
+  });
+  g.appendChild(rotH);
+}
+
+// ===================== OBJECT MOVEMENT =====================
+function getObjCenter(obj) {
+  try {
+    const bbox = obj.el.getBBox();
+    return { cx: bbox.x + bbox.width/2, cy: bbox.y + bbox.height/2 };
+  } catch(e) { return {cx:0,cy:0}; }
+}
+
+function translateObj(obj, newCx, newCy) {
+  try {
+    // Get bbox without any transform
+    const saved = obj.el.getAttribute('transform');
+    obj.el.removeAttribute('transform');
+    const bbox = obj.el.getBBox();
+    if (saved) obj.el.setAttribute('transform', saved);
+
+    const origCx = bbox.x + bbox.width/2;
+    const origCy = bbox.y + bbox.height/2;
+    const angle = obj.angle || 0;
+    const dx = newCx - origCx;
+    const dy = newCy - origCy;
+    obj.tx = dx;
+    obj.ty = dy;
+    obj.el.setAttribute('transform', `translate(${dx},${dy}) rotate(${angle},${origCx},${origCy})`);
+  } catch(e) {}
+}
+
+// ===================== DELETE =====================
+function deleteSelected() {
+  if (!selectedId) return;
+  removeObject(selectedId);
+}
+function removeObject(id) {
+  const idx = objects.findIndex(o => o.id === id);
+  if (idx < 0) return;
+  objects[idx].el.remove();
+  objects.splice(idx, 1);
+  deselect();
+  saveHistory();
+}
+
+// ===================== HISTORY =====================
+function saveHistory() {
+  history = history.slice(0, histIdx + 1);
+  history.push(svg.innerHTML);
+  histIdx++;
+  if (history.length > 80) { history.shift(); histIdx--; }
+}
+function undo() {
+  if (histIdx <= 0) return;
+  histIdx--;
+  restoreHistory();
+}
+function redo() {
+  if (histIdx >= history.length - 1) return;
+  histIdx++;
+  restoreHistory();
+}
+function restoreHistory() {
+  svg.innerHTML = history[histIdx];
+  // Rebuild objects array from DOM
+  objects = [];
+  svg.querySelectorAll('[data-obj-id]').forEach(el => {
+    objects.push({ id: el.dataset.objId, el, type: el.tagName, color, sw: strokeWidth, angle: 0 });
+  });
+  deselect();
+}
+function clearAll() {
+  if (!confirm('すべて消去しますか？')) return;
+  objects = [];
+  svg.innerHTML = '';
+  selGroup = null; // force re-creation next time
+  selectedId = null;
+  saveHistory();
+}
+
+// ===================== ROTATE MOUSEUP =====================
+window.addEventListener('mouseup', (e) => {
+  if (isRotating) { isRotating = false; saveHistory(); }
+  if (isDragging) { isDragging = false; saveHistory(); }
+  if (isDraggingEndpoint) { isDraggingEndpoint = false; draggingEndpoint = null; saveHistory(); }
+  if (isResizing) { isResizing = false; resizeCorner = null; resizeObjSnapshot = null; saveHistory(); }
+  onUp(e);
+});
+
+// ===================== IMAGE =====================
+function triggerImageUpload() {
+  document.getElementById('image-file-input').click();
+}
+
+document.getElementById('image-file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) insertImageFile(file);
+  e.target.value = '';
+});
+
+// Drag & drop onto the board
+document.getElementById('board').addEventListener('dragover', e => e.preventDefault());
+document.getElementById('board').addEventListener('drop', e => {
+  e.preventDefault();
+  const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'));
+  if (file) insertImageFile(file);
+});
+
+function insertImageFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const dataUrl = ev.target.result;
+    const img = new Image();
+    img.onload = () => {
+      const svgRect = svg.getBoundingClientRect();
+      // Place centered, max 400px wide
+      const maxW = 400;
+      const scale = img.width > maxW ? maxW / img.width : 1;
+      const w = img.width * scale;
+      const h = img.height * scale;
+      const x = (svgRect.width - w) / 2;
+      const y = (svgRect.height - h) / 2;
+
+      const svgImg = makeSVGEl('image');
+      svgImg.setAttribute('x', x);
+      svgImg.setAttribute('y', y);
+      svgImg.setAttribute('width', w);
+      svgImg.setAttribute('height', h);
+      svgImg.setAttribute('href', dataUrl);
+      svgImg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      svg.insertBefore(svgImg, getSelGroup());
+
+      const id = newId();
+      svgImg.dataset.objId = id;
+      objects.push({ id, el: svgImg, type: 'image', color, sw: strokeWidth, angle: 0, tx: 0, ty: 0,
+        origCx: x + w/2, origCy: y + h/2 });
+      saveHistory();
+      selectObject(id);
+    };
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Init
+saveHistory();
+</script>
+</body>
+</html>

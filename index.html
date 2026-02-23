@@ -73,6 +73,7 @@ svg#canvas {
   gap: 2px;
   z-index: 100;
   white-space: nowrap;
+  transition: opacity 0.25s ease;
 }
 
 .tool-btn {
@@ -212,22 +213,19 @@ svg#canvas {
   .desktop-actions { display: none !important; }
   .mobile-actions { display: flex !important; }
   
-  /* ツールバーの自動非表示機能 */
-  .toolbar-hidden {
-    opacity: 0.1;
-    transform: translateY(-10px);
-  }
-  
-  .bottombar-hidden {
-    opacity: 0.1;
-    transform: translateY(10px);
-  }
-  
-  .toolbar-hidden:hover,
-  .bottombar-hidden:hover {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  /* ツールバーの自動非表示機能（モバイル） */
+}
+
+/* 描画中のバー非表示（PC・モバイル共通） */
+.toolbar-hidden {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.25s ease !important;
+}
+.bottombar-hidden {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.25s ease !important;
 }
 
 /* 初期状態（デスクトップ）で正しく表示 */
@@ -248,6 +246,7 @@ svg#canvas {
   align-items: center;
   gap: 8px;
   z-index: 100;
+  transition: opacity 0.25s ease;
 }
 
 .color-dot {
@@ -274,6 +273,7 @@ svg#canvas {
 
 #stroke-slider {
   -webkit-appearance: none;
+  appearance: none;
   width: 68px;
   height: 3px;
   background: rgba(0,0,0,0.15);
@@ -282,6 +282,7 @@ svg#canvas {
 }
 #stroke-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
+  appearance: none;
   width: 15px;
   height: 15px;
   background: var(--accent);
@@ -377,6 +378,37 @@ svg#canvas {
   
   .stroke-preview {
     writing-mode: horizontal-tb;
+  }
+  
+  /* モバイルでは下部バーの要素を絞る */
+  #bottombar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  
+  /* 通常の色ドットとセパレーターを非表示 */
+  .color-dot:not(#custom-color-dot),
+  .bar-sep {
+    display: none;
+  }
+  
+  /* カスタムカラーボタンとスライダーのみ表示 */
+  #custom-color-dot {
+    display: flex;
+    width: 36px;
+    height: 36px;
+  }
+  
+  #stroke-slider {
+    width: 80px;
+  }
+  
+  .stroke-preview {
+    font-size: 12px;
+    min-width: 20px;
+  }
+  
+  .stroke-preview {
     width: 16px;
     height: auto;
     text-align: right;
@@ -384,19 +416,19 @@ svg#canvas {
 }
 
 /* 横向きモバイル対応 */
-  @media (max-width: 768px) and (orientation: landscape) {
-    #toolbar {
-      top: 16px;
-      left: 16px;
-      max-height: calc(100vh - 32px);
-    }
-    
-    #bottombar {
-      bottom: 16px;
-      left: auto;
-      right: 16px;
-    }
+@media (max-width: 768px) and (orientation: landscape) {
+  #toolbar {
+    top: 16px;
+    left: 16px;
+    max-height: calc(100vh - 32px);
   }
+  
+  #bottombar {
+    bottom: 16px;
+    left: auto;
+    right: 16px;
+  }
+}
   
   /* モバイル表示時：デスクトップを非表示、モバイルを表示 */
   @media (max-width: 768px) {
@@ -661,8 +693,8 @@ svg.addEventListener('mousedown', onDown);
 window.addEventListener('mousemove', onMove);
 svg.addEventListener('mouseleave', () => {});  // keep for compat
 
-// タッチイベント対応
-svg.addEventListener('touchstart', onTouchStart, {passive: false});
+// タッチイベント対応 - SVGキャンバスのみに登録
+svg.addEventListener('touchstart', onTouchStart, {passive: true});
 window.addEventListener('touchmove', onTouchMove, {passive: false});
 window.addEventListener('touchend', onTouchEnd, {passive: false});
 
@@ -721,10 +753,9 @@ function handleTouchGestures(e) {
 
 // タッチイベントハンドラー
 function onTouchStart(e) {
-  e.preventDefault();
-  
   // ピンチイン/アウトの検出
   if (e.touches.length === 2) {
+    e.preventDefault();
     handleTouchGestures(e);
     return;
   }
@@ -732,6 +763,18 @@ function onTouchStart(e) {
   // 通常の描画操作
   if (e.touches.length === 1) {
     const touch = e.touches[0];
+    const toolbar = document.getElementById('toolbar');
+    const bottombar = document.getElementById('bottombar');
+    const target = e.target;
+    
+    // ツールバー・カラーバー上のタッチはブラウザデフォルト動作（クリック）に任せる
+    if (toolbar.contains(target) || bottombar.contains(target)) {
+      return; // preventDefault しない → ボタンの click イベントが正常に発火
+    }
+    
+    // キャンバス上のタッチのみ preventDefault してマウスイベントに変換
+    e.preventDefault();
+    
     const mouseEvent = new MouseEvent('mousedown', {
       clientX: touch.clientX,
       clientY: touch.clientY,
@@ -739,15 +782,14 @@ function onTouchStart(e) {
       bubbles: true,
       cancelable: true
     });
-    e.target.dispatchEvent(mouseEvent);
+    svg.dispatchEvent(mouseEvent);
   }
 }
 
 function onTouchMove(e) {
-  e.preventDefault();
-  
   // ピンチイン/アウト中の処理
   if (e.touches.length === 2) {
+    e.preventDefault();
     handleTouchGestures(e);
     return;
   }
@@ -755,6 +797,12 @@ function onTouchMove(e) {
   // 通常の描画操作
   if (e.touches.length === 1) {
     const touch = e.touches[0];
+    const toolbar = document.getElementById('toolbar');
+    const bottombar = document.getElementById('bottombar');
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (toolbar.contains(target) || bottombar.contains(target)) return;
+    
+    e.preventDefault();
     const mouseEvent = new MouseEvent('mousemove', {
       clientX: touch.clientX,
       clientY: touch.clientY,
@@ -762,22 +810,23 @@ function onTouchMove(e) {
       bubbles: true,
       cancelable: true
     });
-    window.dispatchEvent(mouseEvent);
+    svg.dispatchEvent(mouseEvent);
   }
 }
 
 function onTouchEnd(e) {
+  const toolbar = document.getElementById('toolbar');
+  const bottombar = document.getElementById('bottombar');
+  // ツールバー操作の場合はブラウザデフォルト動作に任せる
+  if (e.target && (toolbar.contains(e.target) || bottombar.contains(e.target))) return;
+  
   e.preventDefault();
-  // タッチ終了時に描画終了を検知
-  if (isDrawing) {
-    // 描画終了
-  }
   const mouseEvent = new MouseEvent('mouseup', {
     button: 0,
     bubbles: true,
     cancelable: true
   });
-  window.dispatchEvent(mouseEvent);
+  svg.dispatchEvent(mouseEvent);
 }
 
 function onDown(e) {
@@ -1413,67 +1462,44 @@ window.addEventListener('resize', () => {
   initViewBox();
 });
 
-// モバイル向けツールバー重なり検出機能
-let isTouching = false;
-
-// シンプルな重なり検出関数
-function isOverlappingToolbar(touchX, touchY) {
-  if (window.innerWidth > 768) return false; // モバイルのみ
-  
-  const toolbar = document.getElementById('toolbar');
-  const toolbarRect = toolbar.getBoundingClientRect();
-  
-  // タッチ位置がツールバーの領域内かチェック（余白を含む）
-  return touchX >= toolbarRect.left - 20 && 
-         touchX <= toolbarRect.right + 20 && 
-         touchY >= toolbarRect.top - 20 && 
-         touchY <= toolbarRect.bottom + 20;
-}
-
+// ===================== バー自動非表示（PC・モバイル共通）=====================
 function showToolbars() {
-  const toolbar = document.getElementById('toolbar');
-  const bottombar = document.getElementById('bottombar');
-  toolbar.classList.remove('toolbar-hidden');
-  bottombar.classList.remove('bottombar-hidden');
+  document.getElementById('toolbar').classList.remove('toolbar-hidden');
+  document.getElementById('bottombar').classList.remove('bottombar-hidden');
 }
-
 function hideToolbars() {
-  if (window.innerWidth <= 768) {
-    const toolbar = document.getElementById('toolbar');
-    const bottombar = document.getElementById('bottombar');
-    toolbar.classList.add('toolbar-hidden');
-    bottombar.classList.add('bottombar-hidden');
-  }
+  document.getElementById('toolbar').classList.add('toolbar-hidden');
+  document.getElementById('bottombar').classList.add('bottombar-hidden');
 }
 
-
-
-// シンプルな重なり検出機能
-if (window.innerWidth <= 768) {
-  // タッチ移動中に重なりをチェック
-  document.addEventListener('touchmove', (e) => {
-    if (isDrawing && e.touches.length === 1) {
-      const touch = e.touches[0];
-      if (isOverlappingToolbar(touch.clientX, touch.clientY)) {
-        hideToolbars(); // 重なったら非表示
-      } else {
-        showToolbars(); // 離れたら表示
-      }
-    }
-  }, {passive: true});
-  
-  // タッチ開始時に表示
-  document.addEventListener('touchstart', () => {
-    isTouching = true;
-    showToolbars();
-  }, {passive: true});
-  
-  // タッチ終了時に表示
-  document.addEventListener('touchend', () => {
-    isTouching = false;
-    showToolbars();
-  }, {passive: true});
+function isOverAnyBar(clientX, clientY) {
+  const tb = document.getElementById('toolbar').getBoundingClientRect();
+  const bb = document.getElementById('bottombar').getBoundingClientRect();
+  const overToolbar = clientX >= tb.left && clientX <= tb.right &&
+                      clientY >= tb.top  && clientY <= tb.bottom;
+  const overBottombar = clientX >= bb.left && clientX <= bb.right &&
+                        clientY >= bb.top  && clientY <= bb.bottom;
+  return overToolbar || overBottombar;
 }
+
+// PC: マウスで描画中にバーに重なったら非表示
+window.addEventListener('mousemove', (e) => {
+  if (!isDrawing) return;
+  isOverAnyBar(e.clientX, e.clientY) ? hideToolbars() : showToolbars();
+});
+
+window.addEventListener('mouseup', () => {
+  showToolbars();
+});
+
+// モバイル: タッチで描画中にバーに重なったら非表示
+document.addEventListener('touchmove', (e) => {
+  if (!isDrawing || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  isOverAnyBar(t.clientX, t.clientY) ? hideToolbars() : showToolbars();
+}, {passive: true});
+
+document.addEventListener('touchend', showToolbars, {passive: true});
 </script>
 </body>
 </html>

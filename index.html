@@ -1092,15 +1092,19 @@ function ensureArrowMarker() {
   if (!defs) { defs = makeSVGEl('defs'); svg.prepend(defs); }
   const marker = makeSVGEl('marker');
   marker.setAttribute('id', `arrow-${key}`);
-  marker.setAttribute('markerWidth', '8');
-  marker.setAttribute('markerHeight', '8');
-  marker.setAttribute('refX', '6');
+  marker.setAttribute('markerWidth', '10');
+  marker.setAttribute('markerHeight', '10');
+  marker.setAttribute('refX', '9');
   marker.setAttribute('refY', '3');
   marker.setAttribute('orient', 'auto');
-  const path = makeSVGEl('path');
-  path.setAttribute('d', 'M0,0 L0,6 L8,3 Z');
-  path.setAttribute('fill', color);
-  marker.appendChild(path);
+  marker.setAttribute('markerUnits', 'strokeWidth');
+  const polygon = makeSVGEl('polygon');
+  polygon.setAttribute('points', '0,0 10,3 0,6');
+  polygon.setAttribute('fill', color);
+  polygon.setAttribute('stroke', color);
+  polygon.setAttribute('stroke-width', '0');
+  polygon.setAttribute('stroke-linejoin', 'miter');
+  marker.appendChild(polygon);
   defs.appendChild(marker);
 }
 
